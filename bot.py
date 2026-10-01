@@ -1,14 +1,9 @@
-# ============================================================
-# RJ TEAM - GOLD PREMIUM TEST OTP BOT
-# SAFE DEMO / OWN-BACKEND OTP SYSTEM
-# ============================================================
-
 import os
 import sqlite3
 import random
-import string
 import logging
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from telegram import (
     Update,
@@ -22,39 +17,43 @@ from telegram.ext import (
     ContextTypes,
 )
 
-# ============================================================
-# CONFIG
-# ============================================================
+# =========================================================
+# RJ TEAM BANGLADESH - PREMIUM TEST OTP BOT
+# SAFE DEMO / OWN TESTING SYSTEM
+# =========================================================
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN")
 
-OWNER = "@RJteam1"
-PARTNER = "@RjSabbir2024"
-
-REQUIRED_CHATS = [
-    "https://t.me/+wmN83DGHfoVjMjE1",
-    "https://t.me/iphonellc",
-    "https://t.me/RJteam123890",
-]
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "RJteam1").replace("@", "")
+PARTNER_USERNAME = "RjSabbir2024"
 
 DB_NAME = "rj_test_otp.db"
-
-PLATFORMS = {
-    "telegram": "📱 Telegram",
-    "whatsapp": "💬 WhatsApp",
-    "facebook": "🔵 Facebook",
-    "tiktok": "🎵 TikTok",
-    "apple": "🍎 Apple ID",
-}
+BD = ZoneInfo("Asia/Dhaka")
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
 )
 
-# ============================================================
+logger = logging.getLogger(__name__)
+
+
+# =========================================================
+# PLATFORMS
+# =========================================================
+
+PLATFORMS = {
+    "telegram": "Telegram",
+    "whatsapp": "WhatsApp",
+    "facebook": "Facebook",
+    "tiktok": "TikTok",
+    "apple": "Apple ID",
+}
+
+
+# =========================================================
 # DATABASE
-# ============================================================
+# =========================================================
 
 def db():
     return sqlite3.connect(DB_NAME)
@@ -68,10 +67,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
             username TEXT,
-            used_numbers INTEGER DEFAULT 0,
-            otp_received INTEGER DEFAULT 0,
-            otp_shared INTEGER DEFAULT 0,
-            orders INTEGER DEFAULT 0
+            first_name TEXT,
+            created_at TEXT
         )
     """)
 
@@ -81,7 +78,6 @@ def init_db():
             user_id INTEGER,
             platform TEXT,
             phone TEXT,
-            active INTEGER DEFAULT 1,
             created_at TEXT
         )
     """)
@@ -90,11 +86,9 @@ def init_db():
         CREATE TABLE IF NOT EXISTS otps (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
-            number_id INTEGER,
             platform TEXT,
             phone TEXT,
             otp TEXT,
-            shared INTEGER DEFAULT 0,
             created_at TEXT
         )
     """)
@@ -108,51 +102,70 @@ def ensure_user(user):
     cur = con.cursor()
 
     cur.execute(
-        "SELECT user_id FROM users WHERE user_id=?",
-        (user.id,)
+        """
+        INSERT OR IGNORE INTO users
+        (user_id, username, first_name, created_at)
+        VALUES (?, ?, ?, ?)
+        """,
+        (
+            user.id,
+            user.username or "",
+            user.first_name or "",
+            datetime.now(BD).strftime("%Y-%m-%d %H:%M:%S"),
+        ),
     )
 
-    if not cur.fetchone():
-        cur.execute(
-            """
-            INSERT INTO users
-            (user_id, username)
-            VALUES (?, ?)
-            """,
-            (
-                user.id,
-                user.username or "",
-            )
-        )
+    cur.execute(
+        """
+        UPDATE users
+        SET username = ?, first_name = ?
+        WHERE user_id = ?
+        """,
+        (
+            user.username or "",
+            user.first_name or "",
+            user.id,
+        ),
+    )
 
     con.commit()
     con.close()
 
 
-# ============================================================
-# HELPERS
-# ============================================================
+# =========================================================
+# GOLD STYLE
+# =========================================================
 
 def gold(text):
-    return f"✨ {text} ✨"
+    return f"✨ <b>{text}</b> ✨"
 
 
-def generate_test_number():
+# =========================================================
+# DEMO NUMBER
+# =========================================================
+
+def generate_test_number(platform):
     """
-    Demo number only.
-    This is NOT a real phone number source.
+    Demo-only number.
+    Not a real phone number.
     """
-    return "+999" + "".join(
-        random.choice(string.digits)
-        for _ in range(9)
+
+    prefix = {
+        "telegram": "99971",
+        "whatsapp": "99972",
+        "facebook": "99973",
+        "tiktok": "99974",
+        "apple": "99975",
+    }.get(platform, "99970")
+
+    return "+" + prefix + "".join(
+        str(random.randint(0, 9))
+        for _ in range(6)
     )
 
 
 def generate_otp():
-    return "".join(
-        random.choice(string.digits)
-        for _ in range(6)
-    )
+    return str(random.randint(100000, 999999))
 
 
 def save_number(user_id, platform, phone):
@@ -169,271 +182,291 @@ def save_number(user_id, platform, phone):
             user_id,
             platform,
             phone,
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        )
-    )
-
-    number_id = cur.lastrowid
-
-    cur.execute(
-        """
-        UPDATE users
-        SET used_numbers = used_numbers + 1
-        WHERE user_id=?
-        """,
-        (user_id,)
+            datetime.now(BD).strftime("%Y-%m-%d %H:%M:%S"),
+        ),
     )
 
     con.commit()
     con.close()
 
-    return number_id
 
-
-def save_otp(user_id, number_id, platform, phone, otp):
+def save_otp(user_id, platform, phone, otp):
     con = db()
     cur = con.cursor()
 
     cur.execute(
         """
         INSERT INTO otps
-        (user_id, number_id, platform, phone, otp, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+        (user_id, platform, phone, otp, created_at)
+        VALUES (?, ?, ?, ?, ?)
         """,
         (
             user_id,
-            number_id,
             platform,
             phone,
             otp,
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        )
-    )
-
-    cur.execute(
-        """
-        UPDATE users
-        SET otp_received = otp_received + 1
-        WHERE user_id=?
-        """,
-        (user_id,)
+            datetime.now(BD).strftime("%Y-%m-%d %H:%M:%S"),
+        ),
     )
 
     con.commit()
     con.close()
 
 
-# ============================================================
-# KEYBOARDS
-# ============================================================
+# =========================================================
+# MAIN KEYBOARD
+# =========================================================
 
 def home_keyboard():
-
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
-                "📱 NUMBER",
-                callback_data="numbers"
-            ),
-            InlineKeyboardButton(
-                "🔐 OTP",
-                callback_data="otp_menu"
-            ),
+                "📱 Get Test Number",
+                callback_data="number_menu"
+            )
         ],
         [
             InlineKeyboardButton(
-                "👤 PROFILE",
+                "🔐 Generate Test OTP",
+                callback_data="otp_menu"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "👤 Profile",
                 callback_data="profile"
             ),
             InlineKeyboardButton(
-                "📜 HISTORY",
+                "📜 History",
                 callback_data="history"
             ),
         ],
         [
             InlineKeyboardButton(
-                "♻️ RECOVERY",
+                "♻️ Recovery",
                 callback_data="recovery"
+            ),
+            InlineKeyboardButton(
+                "🗑 Delete",
+                callback_data="delete"
             ),
         ],
         [
             InlineKeyboardButton(
-                "👑 OWNER",
+                "👑 Owner",
                 callback_data="owner"
             ),
             InlineKeyboardButton(
-                "🤝 PARTNER",
+                "🤝 Partner",
                 callback_data="partner"
             ),
         ],
-    ])
-
-
-def platform_keyboard(prefix):
-
-    return InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
-                "📱 Telegram",
-                callback_data=f"{prefix}:telegram"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                "💬 WhatsApp",
-                callback_data=f"{prefix}:whatsapp"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                "🔵 Facebook",
-                callback_data=f"{prefix}:facebook"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                "🎵 TikTok",
-                callback_data=f"{prefix}:tiktok"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                "🍎 Apple ID",
-                callback_data=f"{prefix}:apple"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                "↩️ Back",
-                callback_data="home"
+                "❓ Help",
+                callback_data="help"
             )
         ],
     ])
 
 
-# ============================================================
+def platform_keyboard(mode):
+    buttons = []
+
+    for key, name in PLATFORMS.items():
+        buttons.append(
+            InlineKeyboardButton(
+                name,
+                callback_data=f"{mode}:{key}"
+            )
+        )
+
+    rows = [
+        buttons[:2],
+        buttons[2:4],
+        buttons[4:],
+        [
+            InlineKeyboardButton(
+                "⬅️ Back",
+                callback_data="home"
+            )
+        ]
+    ]
+
+    return InlineKeyboardMarkup(rows)
+
+
+# =========================================================
 # START
-# ============================================================
+# =========================================================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ensure_user(update.effective_user)
 
-    user = update.effective_user
-    ensure_user(user)
-
-    text = f"""
-╔══════════════════════════╗
-      👑 RJ TEAM
-   GOLD PREMIUM BOT
-╚══════════════════════════╝
-
-🔥 Welcome {user.first_name}!
-
-এই Bot একটি নিজের/Testing OTP System।
-
-📱 Number
-🔐 Test OTP
-👤 Profile
-📜 History
-♻️ Recovery
-
-━━━━━━━━━━━━━━━━━━━━
-
-⚠️ এই Bot কোনো তৃতীয়-পক্ষের
-বাস্তব OTP সংগ্রহ করে না।
-"""
+    text = (
+        "🌟 <b>RJ TEAM BANGLADESH</b> 🌟\n\n"
+        "💎 <b>PREMIUM TEST BOT</b>\n\n"
+        "এই bot শুধুমাত্র নিজের testing/demo-এর জন্য।\n\n"
+        "📱 Test Number\n"
+        "🔐 Test OTP\n"
+        "👤 Profile\n"
+        "📜 History\n"
+        "♻️ Recovery\n\n"
+        "নিচের menu থেকে একটি option নির্বাচন করুন।"
+    )
 
     await update.message.reply_text(
         text,
-        reply_markup=home_keyboard()
+        parse_mode="HTML",
+        reply_markup=home_keyboard(),
     )
 
 
-# ============================================================
+# =========================================================
+# /MENU
+# =========================================================
+
+async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ensure_user(update.effective_user)
+
+    await update.message.reply_text(
+        "🏠 <b>RJ TEAM MAIN MENU</b>\n\n"
+        "একটি option নির্বাচন করুন:",
+        parse_mode="HTML",
+        reply_markup=home_keyboard(),
+    )
+
+
+# =========================================================
 # NUMBER MENU
-# ============================================================
+# =========================================================
 
-async def number_menu(query):
-
-    text = """
-📱 NUMBER CENTER
-
-আপনার Testing Platform নির্বাচন করুন:
-
-নিচের Platform থেকে একটি নির্বাচন করুন।
-"""
-
-    await query.edit_message_text(
-        text,
-        reply_markup=platform_keyboard("number")
+async def number_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (
+        "📱 <b>TEST NUMBER MENU</b>\n\n"
+        "Platform নির্বাচন করুন।\n\n"
+        "⚠️ এগুলো demo/testing number; "
+        "কোনো third-party account verification-এর জন্য নয়।"
     )
 
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=platform_keyboard("number"),
+        )
+    else:
+        await update.message.reply_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=platform_keyboard("number"),
+        )
 
-# ============================================================
-# GENERATE NUMBER
-# ============================================================
 
-async def generate_number(query, user_id, platform):
+async def number_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await number_menu(update, context)
 
-    phone = generate_test_number()
 
-    number_id = save_number(
-        user_id,
+# =========================================================
+# GENERATE TEST NUMBER
+# =========================================================
+
+async def generate_number(update: Update, context: ContextTypes.DEFAULT_TYPE, platform):
+    query = update.callback_query
+
+    await query.answer()
+
+    ensure_user(update.effective_user)
+
+    phone = generate_test_number(platform)
+
+    save_number(
+        update.effective_user.id,
         platform,
-        phone
+        phone,
     )
+
+    name = PLATFORMS[platform]
 
     keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
-                "🔄 REFRESH",
+                "🔐 Generate Test OTP",
+                callback_data=f"otp:{platform}"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "📱 New Number",
                 callback_data=f"number:{platform}"
             )
         ],
         [
             InlineKeyboardButton(
-                "🔐 GET TEST OTP",
-                callback_data=f"makeotp:{number_id}:{platform}"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                "↩️ BACK",
-                callback_data="numbers"
+                "⬅️ Back",
+                callback_data="number_menu"
             )
         ],
     ])
 
-    text = f"""
-✨ GOLD NUMBER ✨
-
-Platform:
-{PLATFORMS[platform]}
-
-📞 Test Number:
-`{phone}`
-
-━━━━━━━━━━━━━━━━━━
-
-এই নম্বরটি শুধুমাত্র Demo/Test
-সিস্টেমের জন্য।
-
-বাস্তব WhatsApp / Facebook /
-Telegram / TikTok / Apple account
-verification-এর জন্য নয়।
-"""
+    text = (
+        "✅ <b>TEST NUMBER GENERATED</b>\n\n"
+        f"📌 Platform: <b>{name}</b>\n"
+        f"📞 Number: <code>{phone}</code>\n\n"
+        "ℹ️ এটি demo number।\n"
+        "এটি কোনো বাস্তব SMS/verification service-এর number নয়।"
+    )
 
     await query.edit_message_text(
         text,
+        parse_mode="HTML",
         reply_markup=keyboard,
-        parse_mode="Markdown"
     )
 
 
-# ============================================================
-# CREATE TEST OTP
-# ============================================================
+# =========================================================
+# OTP MENU
+# =========================================================
 
-async def create_test_otp(query, user_id, number_id, platform):
+async def otp_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (
+        "🔐 <b>TEST OTP MENU</b>\n\n"
+        "Platform নির্বাচন করুন।\n"
+        "Bot একটি local demo OTP তৈরি করবে।"
+    )
+
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=platform_keyboard("otp"),
+        )
+    else:
+        await update.message.reply_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=platform_keyboard("otp"),
+        )
+
+
+async def otp_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await otp_menu(update, context)
+
+
+# =========================================================
+# CREATE TEST OTP
+# =========================================================
+
+async def create_test_otp(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    platform
+):
+    query = update.callback_query
+
+    await query.answer()
+
+    user_id = update.effective_user.id
 
     con = db()
     cur = con.cursor()
@@ -442,267 +475,270 @@ async def create_test_otp(query, user_id, number_id, platform):
         """
         SELECT phone
         FROM numbers
-        WHERE id=? AND user_id=?
+        WHERE user_id = ? AND platform = ?
+        ORDER BY id DESC
+        LIMIT 1
         """,
-        (number_id, user_id)
+        (user_id, platform),
     )
 
     row = cur.fetchone()
     con.close()
 
     if not row:
-        await query.answer(
-            "Number পাওয়া যায়নি!",
-            show_alert=True
+        await query.edit_message_text(
+            "⚠️ আগে একটি test number তৈরি করুন।",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(
+                        "📱 Generate Number",
+                        callback_data=f"number:{platform}"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "⬅️ Back",
+                        callback_data="otp_menu"
+                    )
+                ],
+            ]),
         )
         return
 
     phone = row[0]
-
     otp = generate_otp()
 
     save_otp(
         user_id,
-        number_id,
         platform,
         phone,
-        otp
+        otp,
     )
+
+    name = PLATFORMS[platform]
 
     keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
-                "📤 SHARE",
-                callback_data=f"share:{number_id}:{platform}"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                "🔄 NEW OTP",
-                callback_data=f"makeotp:{number_id}:{platform}"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                "🔐 OTP MENU",
-                callback_data="otp_menu"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                "↩️ BACK",
-                callback_data="numbers"
-            )
-        ],
-    ])
-
-    text = f"""
-🔐 TEST OTP
-
-Platform:
-{PLATFORMS[platform]}
-
-📞 Number:
-`{phone}`
-
-━━━━━━━━━━━━━━━━━━
-
-🔑 TEST OTP:
-`{otp}`
-
-━━━━━━━━━━━━━━━━━━
-
-⚠️ এটি আপনার নিজের Bot-এর
-generated TEST OTP।
-
-কোনো external service-এর
-real verification code নয়।
-"""
-
-    await query.edit_message_text(
-        text,
-        reply_markup=keyboard,
-        parse_mode="Markdown"
-    )
-
-
-# ============================================================
-# OTP MENU
-# ============================================================
-
-async def otp_menu(query):
-
-    text = """
-🔐 OTP CENTER
-
-কোন Platform-এর নিজের Test OTP
-দেখতে চান?
-"""
-
-    await query.edit_message_text(
-        text,
-        reply_markup=platform_keyboard("otp")
-    )
-
-
-# ============================================================
-# SHOW OTP HISTORY BY PLATFORM
-# ============================================================
-
-async def show_platform_otps(query, user_id, platform):
-
-    con = db()
-    cur = con.cursor()
-
-    cur.execute(
-        """
-        SELECT phone, otp, created_at, shared
-        FROM otps
-        WHERE user_id=? AND platform=?
-        ORDER BY id DESC
-        LIMIT 10
-        """,
-        (user_id, platform)
-    )
-
-    rows = cur.fetchall()
-    con.close()
-
-    text = f"""
-🔐 {PLATFORMS[platform]} TEST OTP
-
-━━━━━━━━━━━━━━━━━━
-"""
-
-    if not rows:
-        text += "\nকোনো Test OTP নেই।\n"
-    else:
-        for i, row in enumerate(rows, 1):
-
-            phone, otp, created, shared = row
-
-            text += (
-                f"\n#{i}\n"
-                f"📞 {phone}\n"
-                f"🔑 `{otp}`\n"
-                f"🕐 {created}\n"
-                f"📤 Shared: {'Yes' if shared else 'No'}\n"
-                f"━━━━━━━━━━━━\n"
-            )
-
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton(
-                "🔄 Refresh",
+                "🔄 New Test OTP",
                 callback_data=f"otp:{platform}"
             )
         ],
         [
             InlineKeyboardButton(
-                "↩️ Back",
-                callback_data="otp_menu"
-            )
-        ],
-    ])
-
-    await query.edit_message_text(
-        text,
-        reply_markup=keyboard,
-        parse_mode="Markdown"
-    )
-
-
-# ============================================================
-# PROFILE
-# ============================================================
-
-async def profile(query, user_id):
-
-    con = db()
-    cur = con.cursor()
-
-    cur.execute(
-        """
-        SELECT
-        used_numbers,
-        otp_received,
-        otp_shared,
-        orders
-        FROM users
-        WHERE user_id=?
-        """,
-        (user_id,)
-    )
-
-    row = cur.fetchone()
-    con.close()
-
-    if not row:
-        values = (0, 0, 0, 0)
-    else:
-        values = row
-
-    text = f"""
-╔══════════════════════╗
-        👤 PROFILE
-╚══════════════════════╝
-
-📱 Number Used:
-{values[0]}
-
-🔐 OTP Received:
-{values[1]}
-
-📤 OTP Shared:
-{values[2]}
-
-📦 Orders:
-{values[3]}
-
-━━━━━━━━━━━━━━━━━━
-
-⚠️ Statistics are for this
-Bot's own test system.
-"""
-
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton(
-                "🗑️ DELETE DATA",
-                callback_data="delete_confirm"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                "📜 HISTORY",
+                "📜 History",
                 callback_data="history"
             )
         ],
         [
             InlineKeyboardButton(
-                "♻️ RECOVERY",
-                callback_data="recovery"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                "↩️ BACK",
-                callback_data="home"
+                "⬅️ Back",
+                callback_data="otp_menu"
             )
         ],
     ])
 
+    text = (
+        "🔐 <b>TEST OTP GENERATED</b>\n\n"
+        f"📌 Platform: <b>{name}</b>\n"
+        f"📞 Number: <code>{phone}</code>\n"
+        f"🔢 Test OTP: <code>{otp}</code>\n\n"
+        "⚠️ এটি local demo OTP।\n"
+        "কোনো external service থেকে SMS নেওয়া হয়নি।"
+    )
+
     await query.edit_message_text(
         text,
-        reply_markup=keyboard
+        parse_mode="HTML",
+        reply_markup=keyboard,
     )
 
 
-# ============================================================
-# HISTORY
-# ============================================================
+# =========================================================
+# PROFILE
+# =========================================================
 
-async def history(query, user_id):
+def get_profile_text(user_id):
+    con = db()
+    cur = con.cursor()
+
+    cur.execute(
+        "SELECT COUNT(*) FROM numbers WHERE user_id = ?",
+        (user_id,),
+    )
+    numbers = cur.fetchone()[0]
+
+    cur.execute(
+        "SELECT COUNT(*) FROM otps WHERE user_id = ?",
+        (user_id,),
+    )
+    otps = cur.fetchone()[0]
+
+    con.close()
+
+    return numbers, otps
+
+
+async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    user = update.effective_user
+    ensure_user(user)
+
+    numbers, otps = get_profile_text(user.id)
+
+    username = f"@{user.username}" if user.username else "Not Set"
+
+    text = (
+        "👤 <b>MY PROFILE</b>\n\n"
+        f"🆔 User ID: <code>{user.id}</code>\n"
+        f"👤 Username: <b>{username}</b>\n"
+        f"📛 Name: <b>{user.first_name}</b>\n\n"
+        f"📱 Test Numbers: <b>{numbers}</b>\n"
+        f"🔐 Test OTPs: <b>{otps}</b>"
+    )
+
+    await query.edit_message_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "⬅️ Back",
+                    callback_data="home"
+                )
+            ]
+        ]),
+    )
+
+
+async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    ensure_user(user)
+
+    numbers, otps = get_profile_text(user.id)
+
+    username = f"@{user.username}" if user.username else "Not Set"
+
+    text = (
+        "👤 <b>MY PROFILE</b>\n\n"
+        f"🆔 User ID: <code>{user.id}</code>\n"
+        f"👤 Username: <b>{username}</b>\n"
+        f"📛 Name: <b>{user.first_name}</b>\n\n"
+        f"📱 Test Numbers: <b>{numbers}</b>\n"
+        f"🔐 Test OTPs: <b>{otps}</b>"
+    )
+
+    await update.message.reply_text(
+        text,
+        parse_mode="HTML",
+    )
+
+
+# =========================================================
+# HISTORY
+# =========================================================
+
+def history_text(user_id):
+    con = db()
+    cur = con.cursor()
+
+    cur.execute(
+        """
+        SELECT platform, phone, created_at
+        FROM numbers
+        WHERE user_id = ?
+        ORDER BY id DESC
+        LIMIT 10
+        """,
+        (user_id,),
+    )
+
+    numbers = cur.fetchall()
+
+    cur.execute(
+        """
+        SELECT platform, phone, otp, created_at
+        FROM otps
+        WHERE user_id = ?
+        ORDER BY id DESC
+        LIMIT 10
+        """,
+        (user_id,),
+    )
+
+    otps = cur.fetchall()
+
+    con.close()
+
+    text = "📜 <b>HISTORY</b>\n\n"
+
+    if numbers:
+        text += "📱 <b>Recent Test Numbers</b>\n"
+        for platform, phone, created_at in numbers:
+            text += (
+                f"• {PLATFORMS.get(platform, platform)} — "
+                f"<code>{phone}</code>\n"
+                f"  {created_at}\n"
+            )
+    else:
+        text += "📱 No test numbers yet.\n"
+
+    text += "\n"
+
+    if otps:
+        text += "🔐 <b>Recent Test OTPs</b>\n"
+        for platform, phone, otp, created_at in otps:
+            text += (
+                f"• {PLATFORMS.get(platform, platform)}\n"
+                f"  📞 <code>{phone}</code>\n"
+                f"  🔢 <code>{otp}</code>\n"
+                f"  {created_at}\n"
+            )
+    else:
+        text += "🔐 No test OTP yet."
+
+    return text
+
+
+async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    await query.edit_message_text(
+        history_text(update.effective_user.id),
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "⬅️ Back",
+                    callback_data="home"
+                )
+            ]
+        ]),
+    )
+
+
+async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ensure_user(update.effective_user)
+
+    await update.message.reply_text(
+        history_text(update.effective_user.id),
+        parse_mode="HTML",
+    )
+
+
+# =========================================================
+# RECOVERY
+# =========================================================
+
+async def recovery(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    user_id = update.effective_user.id
 
     con = db()
     cur = con.cursor()
@@ -711,524 +747,445 @@ async def history(query, user_id):
         """
         SELECT platform, phone, otp, created_at
         FROM otps
-        WHERE user_id=?
+        WHERE user_id = ?
         ORDER BY id DESC
-        LIMIT 15
+        LIMIT 1
         """,
-        (user_id,)
+        (user_id,),
     )
 
-    rows = cur.fetchall()
+    row = cur.fetchone()
     con.close()
 
-    text = """
-📜 OTP HISTORY
-
-━━━━━━━━━━━━━━━━━━
-"""
-
-    if not rows:
-        text += "\nকোনো History নেই।"
+    if not row:
+        text = (
+            "♻️ <b>RECOVERY</b>\n\n"
+            "কোনো test OTP history পাওয়া যায়নি।"
+        )
     else:
+        platform, phone, otp, created_at = row
 
-        for i, row in enumerate(rows, 1):
-
-            platform, phone, otp, created = row
-
-            text += (
-                f"\n{i}. {PLATFORMS.get(platform, platform)}\n"
-                f"📞 {phone}\n"
-                f"🔑 `{otp}`\n"
-                f"🕐 {created}\n"
-                f"━━━━━━━━━━━━\n"
-            )
-
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton(
-                "↩️ BACK",
-                callback_data="home"
-            )
-        ]
-    ])
+        text = (
+            "♻️ <b>LAST TEST OTP</b>\n\n"
+            f"📌 Platform: <b>{PLATFORMS.get(platform, platform)}</b>\n"
+            f"📞 Number: <code>{phone}</code>\n"
+            f"🔢 OTP: <code>{otp}</code>\n"
+            f"🕒 Time: <b>{created_at}</b>"
+        )
 
     await query.edit_message_text(
         text,
-        reply_markup=keyboard,
-        parse_mode="Markdown"
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "⬅️ Back",
+                    callback_data="home"
+                )
+            ]
+        ]),
     )
 
 
-# ============================================================
-# RECOVERY
-# ============================================================
-
-async def recovery(query, user_id):
+async def recovery_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
 
     con = db()
     cur = con.cursor()
 
     cur.execute(
         """
-        SELECT platform, phone, created_at
-        FROM numbers
-        WHERE user_id=?
+        SELECT platform, phone, otp, created_at
+        FROM otps
+        WHERE user_id = ?
         ORDER BY id DESC
-        LIMIT 15
+        LIMIT 1
         """,
-        (user_id,)
+        (user_id,),
     )
 
-    rows = cur.fetchall()
+    row = cur.fetchone()
     con.close()
 
-    text = """
-♻️ RECOVERY CENTER
-
-আপনার সাম্প্রতিক Test Numbers:
-
-━━━━━━━━━━━━━━━━━━
-"""
-
-    if not rows:
-        text += "\nকোনো Recovery data নেই।"
+    if not row:
+        text = "♻️ <b>RECOVERY</b>\n\nকোনো test OTP পাওয়া যায়নি।"
     else:
+        platform, phone, otp, created_at = row
 
-        for i, row in enumerate(rows, 1):
+        text = (
+            "♻️ <b>LAST TEST OTP</b>\n\n"
+            f"📌 Platform: <b>{PLATFORMS.get(platform, platform)}</b>\n"
+            f"📞 Number: <code>{phone}</code>\n"
+            f"🔢 OTP: <code>{otp}</code>\n"
+            f"🕒 Time: <b>{created_at}</b>"
+        )
 
-            platform, phone, created = row
-
-            text += (
-                f"\n{i}. {PLATFORMS.get(platform, platform)}\n"
-                f"📞 {phone}\n"
-                f"🕐 {created}\n"
-            )
-
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton(
-                "↩️ BACK",
-                callback_data="home"
-            )
-        ]
-    ])
-
-    await query.edit_message_text(
+    await update.message.reply_text(
         text,
-        reply_markup=keyboard
+        parse_mode="HTML",
     )
 
 
-# ============================================================
+# =========================================================
 # DELETE
-# ============================================================
+# =========================================================
 
-async def delete_confirm(query):
+async def delete_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
 
     keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
-                "❌ YES, DELETE",
+                "❌ Delete All",
                 callback_data="delete_all"
             ),
             InlineKeyboardButton(
-                "↩️ NO",
-                callback_data="profile"
+                "↩️ Cancel",
+                callback_data="home"
             ),
         ]
     ])
 
     await query.edit_message_text(
-        """
-⚠️ DELETE CONFIRMATION
-
-আপনার Bot-এর test data মুছে ফেলবেন?
-
-এই action-এর পরে recovery
-থেকে আগের data আর পাওয়া যাবে না।
-""",
-        reply_markup=keyboard
+        "🗑 <b>DELETE DATA</b>\n\n"
+        "আপনার test number এবং OTP history সব delete করবেন?",
+        parse_mode="HTML",
+        reply_markup=keyboard,
     )
 
 
-async def delete_all(query, user_id):
+async def delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(
+                "❌ Delete All",
+                callback_data="delete_all"
+            ),
+            InlineKeyboardButton(
+                "↩️ Cancel",
+                callback_data="home"
+            ),
+        ]
+    ])
+
+    await update.message.reply_text(
+        "🗑 <b>DELETE DATA</b>\n\n"
+        "আপনার test number এবং OTP history সব delete করবেন?",
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+
+
+async def delete_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    user_id = update.effective_user.id
 
     con = db()
     cur = con.cursor()
 
     cur.execute(
-        "DELETE FROM otps WHERE user_id=?",
-        (user_id,)
+        "DELETE FROM numbers WHERE user_id = ?",
+        (user_id,),
     )
 
     cur.execute(
-        "DELETE FROM numbers WHERE user_id=?",
-        (user_id,)
-    )
-
-    cur.execute(
-        """
-        UPDATE users
-        SET
-        used_numbers=0,
-        otp_received=0,
-        otp_shared=0,
-        orders=0
-        WHERE user_id=?
-        """,
-        (user_id,)
+        "DELETE FROM otps WHERE user_id = ?",
+        (user_id,),
     )
 
     con.commit()
     con.close()
 
     await query.edit_message_text(
-        "✅ আপনার Test data delete হয়েছে।",
+        "✅ <b>সব test data delete করা হয়েছে।</b>",
+        parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
             [
                 InlineKeyboardButton(
-                    "🏠 HOME",
+                    "🏠 Main Menu",
                     callback_data="home"
                 )
             ]
-        ])
+        ]),
     )
 
 
-# ============================================================
+# =========================================================
 # OWNER
-# ============================================================
+# =========================================================
 
-async def owner(query):
+async def owner(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    text = (
+        "👑 <b>OWNER</b>\n\n"
+        f"👤 Admin: <b>@{ADMIN_USERNAME}</b>\n\n"
+        "RJ TEAM BANGLADESH"
+    )
 
     await query.edit_message_text(
-        f"""
-👑 OWNER
-
-{OWNER}
-
-━━━━━━━━━━━━━━━━━━
-
-RJ TEAM Official Owner
-""",
+        text,
+        parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
             [
                 InlineKeyboardButton(
-                    "↩️ BACK",
+                    "👤 Contact Owner",
+                    url=f"https://t.me/{ADMIN_USERNAME}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "⬅️ Back",
                     callback_data="home"
                 )
-            ]
-        ])
+            ],
+        ]),
     )
 
 
-# ============================================================
+async def owner_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (
+        "👑 <b>OWNER</b>\n\n"
+        f"👤 Admin: <b>@{ADMIN_USERNAME}</b>\n\n"
+        "RJ TEAM BANGLADESH"
+    )
+
+    await update.message.reply_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "👤 Contact Owner",
+                    url=f"https://t.me/{ADMIN_USERNAME}"
+                )
+            ]
+        ]),
+    )
+
+
+# =========================================================
 # PARTNER
-# ============================================================
+# =========================================================
 
-async def partner(query):
+async def partner(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    text = (
+        "🤝 <b>PARTNER</b>\n\n"
+        f"👤 Partner: <b>@{PARTNER_USERNAME}</b>"
+    )
 
     await query.edit_message_text(
-        f"""
-🤝 PARTNER
-
-{PARTNER}
-
-━━━━━━━━━━━━━━━━━━
-
-RJ TEAM Partner
-""",
+        text,
+        parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
             [
                 InlineKeyboardButton(
-                    "↩️ BACK",
+                    "🤝 Contact Partner",
+                    url=f"https://t.me/{PARTNER_USERNAME}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "⬅️ Back",
                     callback_data="home"
                 )
-            ]
-        ])
+            ],
+        ]),
     )
 
 
-# ============================================================
+async def partner_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (
+        "🤝 <b>PARTNER</b>\n\n"
+        f"👤 Partner: <b>@{PARTNER_USERNAME}</b>"
+    )
+
+    await update.message.reply_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "🤝 Contact Partner",
+                    url=f"https://t.me/{PARTNER_USERNAME}"
+                )
+            ]
+        ]),
+    )
+
+
+# =========================================================
+# HELP
+# =========================================================
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (
+        "❓ <b>RJ TEAM HELP</b>\n\n"
+        "Available Commands:\n\n"
+        "▶️ /start - Start bot\n"
+        "🏠 /menu - Main menu\n"
+        "📱 /number - Test number\n"
+        "🔐 /otp - Test OTP\n"
+        "👤 /profile - Profile\n"
+        "📜 /history - History\n"
+        "♻️ /recovery - Last OTP\n"
+        "🗑 /delete - Delete data\n"
+        "👑 /owner - Owner\n"
+        "🤝 /partner - Partner\n"
+        "❓ /help - Help\n\n"
+        "⚠️ এই bot-এর OTP system শুধুমাত্র local/demo testing-এর জন্য।"
+    )
+
+    await update.message.reply_text(
+        text,
+        parse_mode="HTML",
+    )
+
+
+# =========================================================
 # CALLBACK HANDLER
-# ============================================================
+# =========================================================
 
 async def callback_handler(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
-
     query = update.callback_query
-
-    await query.answer()
-
-    user = update.effective_user
-    ensure_user(user)
 
     data = query.data
 
-    # HOME
     if data == "home":
+        await query.answer()
 
         await query.edit_message_text(
-            """
-╔══════════════════════════╗
-      👑 RJ TEAM
-   GOLD PREMIUM BOT
-╚══════════════════════════╝
-
-🔥 Main Menu
-""",
-            reply_markup=home_keyboard()
+            "🏠 <b>RJ TEAM MAIN MENU</b>\n\n"
+            "একটি option নির্বাচন করুন:",
+            parse_mode="HTML",
+            reply_markup=home_keyboard(),
         )
 
-    # NUMBER
-    elif data == "numbers":
+    elif data == "number_menu":
+        await query.answer()
+        await number_menu(update, context)
 
-        await number_menu(query)
-
-    # OTP MENU
     elif data == "otp_menu":
+        await query.answer()
+        await otp_menu(update, context)
 
-        await otp_menu(query)
-
-    # PROFILE
-    elif data == "profile":
-
-        await profile(
-            query,
-            user.id
-        )
-
-    # HISTORY
-    elif data == "history":
-
-        await history(
-            query,
-            user.id
-        )
-
-    # RECOVERY
-    elif data == "recovery":
-
-        await recovery(
-            query,
-            user.id
-        )
-
-    # OWNER
-    elif data == "owner":
-
-        await owner(query)
-
-    # PARTNER
-    elif data == "partner":
-
-        await partner(query)
-
-    # DELETE CONFIRM
-    elif data == "delete_confirm":
-
-        await delete_confirm(query)
-
-    # DELETE
-    elif data == "delete_all":
-
-        await delete_all(
-            query,
-            user.id
-        )
-
-    # NUMBER PLATFORM
     elif data.startswith("number:"):
+        platform = data.split(":", 1)[1]
 
-        platform = data.split(":")[1]
+        if platform in PLATFORMS:
+            await generate_number(
+                update,
+                context,
+                platform,
+            )
 
-        if platform not in PLATFORMS:
-            return
-
-        await generate_number(
-            query,
-            user.id,
-            platform
-        )
-
-    # OTP PLATFORM
     elif data.startswith("otp:"):
+        platform = data.split(":", 1)[1]
 
-        platform = data.split(":")[1]
+        if platform in PLATFORMS:
+            await create_test_otp(
+                update,
+                context,
+                platform,
+            )
 
-        if platform not in PLATFORMS:
-            return
+    elif data == "profile":
+        await profile(update, context)
 
-        await show_platform_otps(
-            query,
-            user.id,
-            platform
+    elif data == "history":
+        await history(update, context)
+
+    elif data == "recovery":
+        await recovery(update, context)
+
+    elif data == "delete":
+        await delete_confirm(update, context)
+
+    elif data == "delete_all":
+        await delete_all(update, context)
+
+    elif data == "owner":
+        await owner(update, context)
+
+    elif data == "partner":
+        await partner(update, context)
+
+    elif data == "help":
+        await query.answer()
+
+        await query.edit_message_text(
+            "❓ <b>HELP</b>\n\n"
+            "Use /help অথবা নিচের menu থেকে option নির্বাচন করুন।",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(
+                        "⬅️ Back",
+                        callback_data="home"
+                    )
+                ]
+            ]),
         )
 
-    # CREATE OTP
-    elif data.startswith("makeotp:"):
 
-        parts = data.split(":")
-
-        number_id = int(parts[1])
-        platform = parts[2]
-
-        await create_test_otp(
-            query,
-            user.id,
-            number_id,
-            platform
-        )
-
-    # SHARE
-    elif data.startswith("share:"):
-
-        parts = data.split(":")
-
-        number_id = int(parts[1])
-        platform = parts[2]
-
-        con = db()
-        cur = con.cursor()
-
-        cur.execute(
-            """
-            SELECT otp
-            FROM otps
-            WHERE
-            user_id=?
-            AND number_id=?
-            AND platform=?
-            ORDER BY id DESC
-            LIMIT 1
-            """,
-            (
-                user.id,
-                number_id,
-                platform
-            )
-        )
-
-        row = cur.fetchone()
-
-        if row:
-
-            cur.execute(
-                """
-                UPDATE otps
-                SET shared=1
-                WHERE
-                user_id=?
-                AND number_id=?
-                AND platform=?
-                """,
-                (
-                    user.id,
-                    number_id,
-                    platform
-                )
-            )
-
-            cur.execute(
-                """
-                UPDATE users
-                SET otp_shared=otp_shared+1
-                WHERE user_id=?
-                """,
-                (user.id,)
-            )
-
-            con.commit()
-
-        con.close()
-
-        if row:
-
-            await query.message.reply_text(
-                f"""
-📤 SHARE TEST OTP
-
-{PLATFORMS[platform]}
-
-🔐 Test OTP:
-`{row[0]}`
-
-⚠️ এটি শুধুমাত্র নিজের
-Demo/Test OTP।
-""",
-                parse_mode="Markdown"
-            )
-
-            await query.answer(
-                "Test OTP share করা হয়েছে!"
-            )
-
-        else:
-
-            await query.answer(
-                "কোনো OTP পাওয়া যায়নি!",
-                show_alert=True
-            )
-
-
-# ============================================================
+# =========================================================
 # ERROR HANDLER
-# ============================================================
+# =========================================================
 
-async def error_handler(
-    update: object,
-    context: ContextTypes.DEFAULT_TYPE
-):
-
-    logging.error(
-        "Bot Error: %s",
-        context.error
+async def error_handler(update, context):
+    logger.exception(
+        "Exception while handling update:",
+        exc_info=context.error,
     )
 
 
-# ============================================================
+# =========================================================
 # MAIN
-# ============================================================
+# =========================================================
 
 def main():
 
+    if BOT_TOKEN == "YOUR_BOT_TOKEN":
+        raise ValueError(
+            "BOT_TOKEN environment variable সেট করুন।"
+        )
+
     init_db()
 
-    if BOT_TOKEN == "YOUR_BOT_TOKEN":
+    app = Application.builder().token(BOT_TOKEN).build()
 
-        print(
-            "ERROR: BOT_TOKEN সেট করুন।"
-        )
-        return
+    # Commands
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("menu", menu_command))
+    app.add_handler(CommandHandler("number", number_command))
+    app.add_handler(CommandHandler("otp", otp_command))
+    app.add_handler(CommandHandler("profile", profile_command))
+    app.add_handler(CommandHandler("history", history_command))
+    app.add_handler(CommandHandler("recovery", recovery_command))
+    app.add_handler(CommandHandler("delete", delete_command))
+    app.add_handler(CommandHandler("owner", owner_command))
+    app.add_handler(CommandHandler("partner", partner_command))
+    app.add_handler(CommandHandler("help", help_command))
 
-    app = (
-        Application.builder()
-        .token(BOT_TOKEN)
-        .build()
-    )
-
+    # Buttons
     app.add_handler(
-        CommandHandler(
-            "start",
-            start
-        )
+        CallbackQueryHandler(callback_handler)
     )
 
-    app.add_handler(
-        CallbackQueryHandler(
-            callback_handler
-        )
-    )
+    # Errors
+    app.add_error_handler(error_handler)
 
-    app.add_error_handler(
-        error_handler
-    )
-
-    print(
-        "RJ TEAM GOLD TEST OTP BOT STARTED..."
-    )
+    print("RJ TEAM BOT STARTED...")
 
     app.run_polling(
         allowed_updates=Update.ALL_TYPES
